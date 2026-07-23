@@ -1,15 +1,4 @@
 export default async function (request, response) {
-    // Configurações de segurança para permitir que o Google Sites acesse a API
-    response.setHeader('Access-Control-Allow-Credentials', true);
-    response.setHeader('Access-Control-Allow-Origin', '*');
-    response.setHeader('Access-Control-Allow-Methods', 'GET,OPTIONS,PATCH,DELETE,POST,PUT');
-    response.setHeader('Access-Control-Allow-Headers', 'X-CSRF-Token, X-Requested-With, Accept, Accept-Version, Content-Length, Content-MD5, Content-Type, Date, X-Api-Version');
-
-    // Responde rapidamente a requisições de pré-verificação (CORS)
-    if (request.method === 'OPTIONS') {
-        return response.status(200).end();
-    }
-
     if (request.method !== 'POST') {
         return response.status(405).send('Method Not Allowed');
     }
@@ -17,14 +6,13 @@ export default async function (request, response) {
     const { filename, content, owner, repo } = request.body;
 
     if (!filename || !content || !owner || !repo) {
-        return response.status(400).json({ error: 'Dados incompletos no corpo da requisição.' });
+        return response.status(400).json({ error: 'Missing filename, content, owner, or repo in request body.' });
     }
 
-    // O Token deve ser configurado no Vercel como variável de ambiente GITHUB_TOKEN
     const githubToken = process.env.GITHUB_TOKEN;
 
     if (!githubToken) {
-        return response.status(500).json({ error: 'Token do GitHub não configurado no Vercel.' });
+        return response.status(500).json({ error: 'GitHub Token not configured on the server.' });
     }
 
     try {
@@ -39,19 +27,20 @@ export default async function (request, response) {
                 'User-Agent': 'Vercel-Serverless-Function'
             },
             body: JSON.stringify({
-                message: `Upload via Gerador: ${filename}`,
+                message: `Upload via Gerador de Comunicados: ${filename}`,
                 content: content
-            } )
+            })
         });
 
         if (githubResponse.ok) {
+            const data = await githubResponse.json();
             const rawUrl = `https://raw.githubusercontent.com/${owner}/${repo}/main/${path}`;
-            return response.status(200 ).json({ success: true, url: rawUrl });
+            return response.status(200).json({ success: true, url: rawUrl, githubData: data });
         } else {
             const errorData = await githubResponse.json();
-            return response.status(githubResponse.status).json({ error: 'Falha no GitHub', details: errorData.message });
+            return response.status(githubResponse.status).json({ error: 'Failed to upload to GitHub', details: errorData });
         }
     } catch (error) {
-        return response.status(500).json({ error: 'Erro interno no servidor', details: error.message });
+        return response.status(500).json({ error: 'Internal Server Error', details: error.message });
     }
 }
